@@ -63,10 +63,6 @@ if (!$server) {
  exit;
 }
 
-#
-# if url has .js in it, return javascript client
-#
-
 $name=$form{'n'}; $name=lc($name); $name=~s/[^a-z0-9]//g;
 
 if (-e "$datadir/p/$name.txt") {
