@@ -103,7 +103,12 @@ if ($server eq "" or $server eq 'l') {
   ## display list of servers - can use dragon.htm as client for this purpose
   #open dir, send s= for each subdir except 11-dragon
   opendir(DIR,$datadir);
-  while($s=readdir(DIR)){print "s=$s\n" if substr($s,0,1)ne'.'&&$s ne 'p';}
+  while($s=readdir(DIR)){
+    chomp($s);
+    $s=~s/.txt//g;
+    if (length($s)<3) { next; }
+    print "s=$s\n";
+  }
   closedir(DIR);
   print "servers=\n";
   exit;
@@ -126,6 +131,7 @@ if (-e "$datadir") {
   #  -mov [item][z][new-z]
   #  -ren [item][z][new-item]
   #   exp [item][z][new-expires]
+  #   map [map][tileset]
   #
   # things to do:
   #  check list of expired items, if player token logout
@@ -136,12 +142,16 @@ if (-e "$datadir") {
     foreach $rec (@data) {
       chomp($rec); $rec=~s/.txt//g; if (length($rec)<3) { next; }
       ($item,$z,$exp)=split(/-/, $rec);
-      if ($item=~/W/) {
-        open (FILE, "$datadir/$item-$z-$exp.txt"); $obj=<FILE>; close FILE; chomp($obj);
+      if ($item=~/V/) {
+        open (FILE, "$datadir/$item-$z-$exp.txt"); chomp($obj=<FILE>); close FILE;
         print "o=$item-$obj\n";
-        #print "alert=$item-$obj\n";
+      }
+      if ($item=~/W/) {
+        open (FILE, "$datadir/$item-$z-$exp.txt"); chomp($obj=<FILE>); close FILE;
+        print "o=$item-$obj\n";
       }
     }
+    open (FILE, "$datadir/m.txt"); chomp ($map=<FILE>); close FILE; print "map=$map\n";
     print "start=";
   }
     
@@ -153,7 +163,6 @@ if (-e "$datadir") {
       #print "pop=$item $z $exp\n";
       if ($exp ne "0000000000") { 
         if ($cstamp>$exp) {
-          print "pop=$item expired $exp\n";
           unlink ("$datadir/$rec.txt");
           $e.="$item$z";
           if ($item=~/W/) { $objfile=1; }
@@ -174,19 +183,12 @@ if (-e "$datadir") {
     while (length($z)<3) { $z="0".$z; } if (length($z)==3) {} else { $z="078"; }
     
     if (length($z)==3) {
-      $exp=$cstamp+$exp;
-      $item="";
-
-      opendir(DIR,"$datadir");
-      @data=readdir(DIR);
-      closedir(DIR);
-
+      $exp=$cstamp+$exp; $item="";
+      opendir(DIR,"$datadir"); @data=readdir(DIR); closedir(DIR);
       #get list of player tokens in-game
       $item=""; $i=""; foreach $rec (@data) {
-        chomp($rec); $rec=~s/.txt//g; 
-        if (length($rec)<3) { next; }
-        ($item,$a,$b)=split(/-/, $rec);
-        if ($item=~/W/) { $i.="$item"; }
+        chomp($rec); $rec=~s/.txt//g; if (length($rec)<3) { next; }
+        ($item,$a,$b)=split(/-/, $rec); if ($item=~/W/) { $i.="$item"; }
       }
 
       for $f ('a' .. 'z') {
@@ -217,8 +219,6 @@ if (-e "$datadir") {
         open (FILE, ">$datadir/$item-$z-$exp.txt"); print FILE ""; close FILE;
         #print "pop=$item added\n";
       }   
-    } else {
-      print "pop=bad z\n";
     }
   }
 
@@ -230,11 +230,7 @@ if (-e "$datadir") {
       $item=substr($item,0,2);
       while (length($itemz)<3) { $itemz="0".$itemz; }
       $a=glob "$datadir/$item-$itemz-??????????.txt";
-      if ($a) {
-        $b=substr($a,length($a)-14,10);
-        unlink ("$datadir/$item-$itemz-$b.txt");
-        print "pop=$item Deleted\n";        
-      } 
+      if ($a) { $b=substr($a,length($a)-14,10); unlink ("$datadir/$item-$itemz-$b.txt"); } 
     }
   }
 
@@ -288,9 +284,46 @@ if (-e "$datadir") {
         $item=substr($item,0,2);
         while (length($itemz)<3) { $itemz="0".$itemz; }
         $a=glob "$datadir/$item-$itemz-??????????.txt";
-        $b=substr($a,length($a)-14,10); 
-        rename ("$datadir/$item-$itemz-$b.txt", "$datadir/$item-$z-$b.txt");        
+        $b=substr($a,length($a)-14,10);
+        $e=$cstamp+60;
+        rename ("$datadir/$item-$itemz-$b.txt", "$datadir/$item-$z-$e.txt");        
       }
+    }
+  }
+
+  if ($form{'c'} eq "bld") {
+    ($obj,$z)=split(/-/,$form{d}); $obj=~s/[^A-Za-z0-9]//g; $z=~s/[^A-Za-z0-9]//g; while (length($z)<3) { $z="0".$z; }
+    if (length($z)==3) {
+      if (length($obj)>2) {
+        $item=""; 
+        opendir(DIR,"$datadir"); @data=readdir(DIR); closedir(DIR);
+        #get list of buildings in-game
+        $item=""; $i=""; foreach $rec (@data) {
+          chomp($rec); $rec=~s/.txt//g; if (length($rec)<3) { next; }
+          ($item,$a,$b)=split(/-/, $rec); if ($item=~/V/) { $i.="$item"; }
+        }
+
+        for $f ('a' .. 'z') {
+          if ($i=~/V$f/) { next; } else {
+            $item="V$f";
+            print "pop=$item $obj\n";
+            open (FILE, ">$datadir/$item-$z-0000000000.txt");
+            print FILE "$obj"; close FILE;
+            last;
+          }
+        } 
+        print "pop=Building Added\n";
+      }
+    }
+  }
+    
+  if ($form{'c'} eq "map") {
+    $form{'d'}=~s/[^A-Za-z0-9]//g;  
+    if ($form{d}) {
+      open (FILE, ">$datadir/m.txt");
+      print FILE "$form{d}";
+      close FILE;
+      print "pop=Map Saved\n";
     }
   }
   
